@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width,initial-scale=1" />
+	<title>®worksapce</title>
+	<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+	<div class="slideshow" id="slideshow">
+		<!-- slides inserted by JS -->
+	</div>
+
+	<div class="controls">
+		<div style="display:flex;align-items:center;gap:12px;pointer-events:auto;">
+			<button class="btn" id="prev">← </button>
+		</div>
+		<div style="display:flex;align-items:center;gap:12px;pointer-events:auto;">
+			<button class="btn" id="next"> →</button>
+		</div>
+	</div>
+
+	<!-- Side panel for widgets -->
+	<div class="side-panel-toggle" id="sidePanelToggle" title="Show widgets">+</div>
+	<div class="side-panel" id="sidePanel">
+		<div class="side-panel-header">
+			<button class="side-panel-close-btn" id="sidePanelClose" title="Hide widgets">−</button>
+		</div>
+		<div class="side-panel-content">
+			<div class="widget" id="weather1">
+				<small>Melbourne</small>
+				<div id="w1">Loading…</div>
+				<div id="w1-forecast" style="margin-top:8px;display:flex;gap:6px;justify-content:center"></div>
+			</div>
+
+			<!-- System stats widget (two realtime line charts stacked) -->
+			<div class="widget sys-widget" id="syswidget">
+				<small>System</small>
+				<div id="sys" style="font-size: 10px">Loading…</div>
+				<canvas id="sysChartCpu"></canvas>
+				<canvas id="sysChartMem"></canvas>
+			</div>
+		</div>
+		<button class="refresh-btn" id="refreshBtn" title="Refresh images">♻︎</button>
+	</div>
+
+	<div class="caption" id="caption"></div>
+
+	<div class="dots" id="dots"></div>
+
+	<div class="bottom-bar">
+		<form class="search" action="https://www.google.com/search" method="GET" target="_blank">
+			<input name="q" type="search" placeholder="" aria-label="Search Google">
+			<button type="submit" style="opacity:0.2">Search</button>
+		</form>
+	</div>
+
+
+	<script>
+		// Side panel toggle functionality
+		const sidePanelToggle = document.getElementById('sidePanelToggle');
+		const sidePanel = document.getElementById('sidePanel');
+		const sidePanelClose = document.getElementById('sidePanelClose');
+
+		sidePanelToggle.addEventListener('click', () => {
+			sidePanel.classList.add('show');
+			sidePanelToggle.style.display = 'none';
+		});
+
+		sidePanelClose.addEventListener('click', () => {
+			sidePanel.classList.remove('show');
+			sidePanelToggle.style.display = 'block';
+		});
+
+		// Slideshow will be populated from server /list-images
+		const slideshow = document.getElementById('slideshow');
+		const caption = document.getElementById('caption');
+		const dots = document.getElementById('dots');
+
+		let images = [];
+		let idx = 0;
+		let currentFolder = 'images'; // Track which folder is active
+
+		function clearSlides(){
+			slideshow.innerHTML = '';
+			dots.innerHTML = '';
+		}
+
+		function createSlides(){
+			clearSlides();
+			images.forEach((src,i)=>{
+				const el = document.createElement('div');
+				el.className='slide';
+				el.style.backgroundImage = `url(${src})`;
+				el.dataset.index = i;
+				slideshow.appendChild(el);
+
+				const d = document.createElement('div');
+				d.className='dot';
+				d.addEventListener('click',()=>goTo(i));
+				dots.appendChild(d);
+			});
+		}
+
+		function show(i){
+			const slides = document.querySelectorAll('.slide');
+			if(slides.length===0) return;
+			slides.forEach(s=>s.classList.remove('show'));
+			const allDots = document.querySelectorAll('.dot');
+			allDots.forEach(d=>d.classList.remove('active'));
+			const n = (i + slides.length) % slides.length;
+			slides[n].classList.add('show');
+			allDots[n].classList.add('active');
+			caption.textContent = `${n+1} / ${slides.length}`;
+			idx = n;
+		}
+
+		function next(){ show(idx+1); }
+		function prev(){ show(idx-1); }
+		function goTo(i){ show(i); }
+
+		async function loadImagesFromServer(){
+			try{
+				console.log(`Loading images from folder: ${currentFolder}`);
+				const res = await fetch(`/list-images?folder=${currentFolder}`);
+				if(res.ok){
+					const list = await res.json();
+					console.log(`Got ${list.length} files from ${currentFolder}:`, list);
+					// Filter for jpg/png (in case server returns other files)
+					images = list.filter(p => /\.(png|jpe?g|webp)$/i.test(p));
+					console.log(`Filtered to ${images.length} images`);
+				}
+			}catch(e){ 
+				console.error('Error loading images:', e);
+			}
+
+			// Fallback to placeholders if none found
+			if(!images || images.length===0){
+				console.log('No images found, using fallback');
+				images = ['images/1.png','images/2.png','images/3.png'];
+			}
+
+			// Shuffle images randomly
+			for(let i = images.length - 1; i > 0; i--){
+				const j = Math.floor(Math.random() * (i + 1));
+				[images[i], images[j]] = [images[j], images[i]];
+			}
+
+			createSlides();
+			show(0);
+		}
+
+		// Load images list and build slides
+		loadImagesFromServer();
+
+		// Wire up refresh button to reload image list without full page reload
+		const refreshBtn = document.getElementById('refreshBtn');
+		if(refreshBtn){
+			refreshBtn.addEventListener('click', async (e)=>{
+				e.preventDefault();
+				const prev = refreshBtn.innerHTML;
+				refreshBtn.textContent = '...';
+				try{
+					// Toggle between folders
+					currentFolder = currentFolder === 'prn' ? 'images' : 'prn';
+					await loadImagesFromServer();
+					show(0);
+				}catch(err){ /* ignore */ }
+				setTimeout(()=>{ refreshBtn.innerHTML = prev; }, 700);
+			});
+		}
+
+		document.getElementById('next').addEventListener('click',next);
+		document.getElementById('prev').addEventListener('click',prev);
+
+		// Keyboard
+		window.addEventListener('keydown', (e)=>{ if(e.key==='ArrowRight') next(); if(e.key==='ArrowLeft') prev(); });
+
+		// Weather for a single location: current + 5-day forecast (Open-Meteo)
+		async function fetchWeather(lat,lon,el, forecastContainer){
+			try{
+				// Request current weather, hourly humidity, and daily forecasts
+				const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=relativehumidity_2m&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=auto&temperature_unit=celsius`;
+				const res = await fetch(url);
+				const j = await res.json();
+				const cur = j.current_weather;
+
+				// find humidity for current hour if available
+				let humidity = null;
+				if(cur && j.hourly && Array.isArray(j.hourly.time)){
+					const idx = j.hourly.time.indexOf(cur.time);
+					if(idx >= 0 && j.hourly.relativehumidity_2m && j.hourly.relativehumidity_2m[idx] !== undefined){
+						humidity = j.hourly.relativehumidity_2m[idx];
+					}
+				}
+
+				// Pollen/allergy heuristic (simple, month+hemisphere)
+				function pollenLevel(lat){
+					const month = new Date().getMonth() + 1;
+					if(lat >= 0){ if(month >= 3 && month <= 5) return 'High'; if(month >= 9 && month <= 10) return 'Moderate'; }
+					else { if(month >= 9 && month <= 11) return 'High'; if(month >= 3 && month <= 4) return 'Moderate'; }
+					return 'Low';
+				}
+
+				const pollen = pollenLevel(lat);
+
+				// Render current summary
+				if(cur){
+					el.innerHTML = `\n                        <div style="font-size:18px;font-weight:600">${cur.temperature}°C</div>\n                        <small>Wind ${cur.windspeed} km/h • Humidity ${humidity!==null?humidity+'%':'n/a'}</small>\n                        <div style="margin-top:6px"><small>Allergy: ${pollen}</small></div>\n                    `;
+				}
+
+				// Render 5-day forecast (if daily present)
+				if(forecastContainer && j.daily && Array.isArray(j.daily.time)){
+					forecastContainer.innerHTML = '';
+					const days = j.daily.time.slice(0,5);
+					const tmax = j.daily.temperature_2m_max || [];
+					const tmin = j.daily.temperature_2m_min || [];
+					const codes = j.daily.weathercode || [];
+
+					function wkday(dateStr){
+						const d = new Date(dateStr + 'T00:00:00');
+						return d.toLocaleDateString(undefined, {weekday:'short'});
+					}
+
+					function weatherEmoji(code){
+						// simplified mapping for common weathercodes
+						if(code === 0) return '☀️';
+						if(code >= 1 && code <= 3) return '⛅';
+						if((code >= 45 && code <= 48) || (code >= 51 && code <= 57) || (code >= 61 && code <= 67)) return '🌧️';
+						if(code >= 71 && code <= 77) return '❄️';
+						if(code >= 80 && code <= 82) return '🌦️';
+						return '🌤️';
+					}
+
+					days.forEach((day,i)=>{
+						const card = document.createElement('div');
+						card.style.textAlign = 'center';
+						card.style.minWidth = '48px';
+						card.style.padding = '6px 6px';
+						card.style.borderRadius = '6px';
+						card.style.background = 'rgba(255,255,255,0.02)';
+						card.style.fontSize = '10px';
+						const dayName = wkday(day);
+						const emoji = weatherEmoji(codes[i]);
+						const tMax = tmax[i] !== undefined ? Math.round(tmax[i]) + '°' : '—';
+						const tMin = tmin[i] !== undefined ? Math.round(tmin[i]) + '°' : '—';
+						card.innerHTML = `<div style="font-weight:600">${dayName}</div><div>${emoji}</div><div>${tMax}/${tMin}</div>`;
+						forecastContainer.appendChild(card);
+					});
+				}
+
+			}catch(err){ el.textContent = 'No data'; if(forecastContainer) forecastContainer.textContent = ''; }
+		}
+
+		// Only fetch weather for Melbourne and show 5-day forecasts
+		fetchWeather(-37.8136,144.9631,document.getElementById('w1'), document.getElementById('w1-forecast'));// Melbourne
+
+		// Auto advance every 6s
+		let autoplay = setInterval(next,6000);
+		// Pause on hover
+		slideshow.addEventListener('mouseenter',()=>clearInterval(autoplay));
+		slideshow.addEventListener('mouseleave',()=>autoplay=setInterval(next,6000));
+
+		// System stats: try local server first (precise), fall back to browser info
+		function formatGB(n){ return (Math.round(n*10)/10) + ' GB'; }
+
+		const sysWidget = document.getElementById('syswidget');
+		const sysEl = document.getElementById('sys');
+
+		// Ensure the system widget matches the computed width of the weather widgets
+		function syncSysWidgetWidth(){
+			const weatherFirst = document.querySelector('.top-right-widgets .widget');
+			if(!weatherFirst) return;
+			const style = getComputedStyle(weatherFirst);
+			const width = style.width;
+			// Apply width to sys widget (keep current padding/border from CSS)
+			sysWidget.style.width = width;
+		}
+
+		// ResizeObserver to watch for changes to the weather widgets container
+		if(window.ResizeObserver){
+			const obsTarget = document.querySelector('.top-right-widgets');
+			if(obsTarget){
+				const ro = new ResizeObserver(()=> syncSysWidgetWidth());
+				ro.observe(obsTarget);
+			}
+		}
+
+		// Sync on load and on window resize as well
+		document.addEventListener('DOMContentLoaded', syncSysWidgetWidth);
+		window.addEventListener('load', syncSysWidgetWidth);
+		window.addEventListener('resize', syncSysWidgetWidth);
+
+		function browserSystemInfoObj(){
+			const obj = { cpu_percent: null, memory_percent: null, cpu_count: null };
+			if(navigator.hardwareConcurrency){ obj.cpu_count = navigator.hardwareConcurrency; }
+			if(performance && performance.memory){
+				try{
+					const m = performance.memory;
+					const used = m.usedJSHeapSize, total = m.totalJSHeapSize;
+					if(total>0) obj.memory_percent = Math.round((used/total)*100);
+				}catch(e){}
+			}
+			// deviceMemory is GB approximate but not percent
+			return obj;
+		}
+
+		async function fetchLocalStats(){
+			const endpoints = ['/stats','http://127.0.0.1:5000/stats','http://localhost:5000/stats'];
+			for(const ep of endpoints){
+				try{
+					const ctrl = new AbortController();
+					const id = setTimeout(()=>ctrl.abort(), 1200);
+					const res = await fetch(ep, {signal: ctrl.signal});
+					clearTimeout(id);
+					if(!res.ok) continue;
+					const j = await res.json();
+					return { cpu_percent: Math.round(j.cpu_percent), memory_percent: j.memory_percent!==undefined?Math.round(j.memory_percent):null, cpu_count: j.cpu_count };
+				}catch(e){ /* try next endpoint */ }
+			}
+			return null;
+		}
+
+		// Setup two compact Chart.js line charts (CPU and Memory) - realtime updates
+		let cpuChart = null, memChart = null;
+		const maxPoints = 60;
+
+		function initCharts(){
+			const ctxCpu = document.getElementById('sysChartCpu').getContext('2d');
+			const ctxMem = document.getElementById('sysChartMem').getContext('2d');
+
+			const commonOptions = {
+				animation: false,
+				maintainAspectRatio: false,
+				scales: { x: { display: false }, y: { min: 0, max: 100, ticks: { color: 'rgba(255,255,255,0.9)', font: {size:10} } } },
+				plugins: { legend: { display: false } }
+			};
+
+			cpuChart = new Chart(ctxCpu, {
+				type: 'line',
+				data: { labels: [], datasets: [{ label: 'CPU %', data: [], borderColor: 'rgba(255,99,132,1)', backgroundColor: 'rgba(255,99,132,0.08)', tension: 0.25, pointRadius:0, borderWidth:2 }] },
+				options: commonOptions
+			});
+
+			memChart = new Chart(ctxMem, {
+				type: 'line',
+				data: { labels: [], datasets: [{ label: 'Memory %', data: [], borderColor: 'rgba(54,162,235,1)', backgroundColor: 'rgba(54,162,235,0.06)', tension: 0.25, pointRadius:0, borderWidth:2 }] },
+				options: commonOptions
+			});
+		}
+
+		async function updateSysWidget(){
+			let stats = await fetchLocalStats();
+			if(!stats) stats = browserSystemInfoObj();
+
+			const cpuVal = stats.cpu_percent!==null?stats.cpu_percent:0;
+			const memVal = stats.memory_percent!==null?stats.memory_percent:0;
+
+			// Update text label (no core count)
+			let txt = 'CPU: ' + (cpuVal!==null? cpuVal + '%' : '—');
+			txt += ' • Memory: ' + (memVal!==null? memVal + '%' : '—');
+			sysEl.textContent = txt;
+
+			// Initialize charts if needed
+			if((!cpuChart || !memChart) && window.Chart){ initCharts(); }
+
+			const nowLabel = new Date().toLocaleTimeString();
+			if(cpuChart && memChart){
+				cpuChart.data.labels.push(nowLabel);
+				cpuChart.data.datasets[0].data.push(cpuVal);
+				memChart.data.labels.push(nowLabel);
+				memChart.data.datasets[0].data.push(memVal);
+
+				while(cpuChart.data.labels.length > maxPoints){ cpuChart.data.labels.shift(); cpuChart.data.datasets[0].data.shift(); }
+				while(memChart.data.labels.length > maxPoints){ memChart.data.labels.shift(); memChart.data.datasets[0].data.shift(); }
+
+				cpuChart.update('none');
+				memChart.update('none');
+			}
+		}
+
+		// Start updates after Chart.js is available (or immediately fallback to text)
+		function startSysUpdates(){
+			updateSysWidget();
+			setInterval(updateSysWidget, 2000);
+		}
+
+		if(window.Chart){ startSysUpdates(); }
+		else {
+			const s = document.createElement('script');
+			s.src = 'https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js';
+			s.onload = startSysUpdates;
+			s.onerror = ()=>{ startSysUpdates(); };
+			document.head.appendChild(s);
+		}
+
+
+	</script>
+</body>
+</html>
+

@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Cropper</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Helvetica Neue", sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #0f0f0f 100%);
+            color: #f5f5f5;
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: #ffffff;
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            letter-spacing: -0.5px;
+        }
+
+        p {
+            color: #a1a1a6;
+            font-size: 14px;
+            margin-bottom: 24px;
+            font-weight: 400;
+        }
+
+        .drop-zone {
+            border: 2px solid rgba(255, 255, 255, 0.08);
+            border-radius: 20px;
+            padding: 60px 40px;
+            text-align: center;
+            cursor: pointer;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            margin-bottom: 32px;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .drop-zone::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(135deg, rgba(10, 132, 255, 0) 0%, rgba(10, 132, 255, 0.08) 100%);
+            pointer-events: none;
+        }
+
+        .drop-zone:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(10, 132, 255, 0.3);
+            transform: translateY(-2px);
+            box-shadow: 0 12px 48px rgba(10, 132, 255, 0.15);
+        }
+
+        .drop-zone.drag-over {
+            background: rgba(10, 132, 255, 0.12);
+            border-color: rgba(10, 132, 255, 0.5);
+            box-shadow: 0 16px 64px rgba(10, 132, 255, 0.2);
+        }
+
+        .drop-zone p {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 600;
+            color: #ffffff;
+            position: relative;
+            z-index: 1;
+            letter-spacing: -0.3px;
+        }
+
+        .drop-zone small {
+            color: #86868b;
+            display: block;
+            margin-top: 8px;
+            font-size: 13px;
+            position: relative;
+            z-index: 1;
+            font-weight: 400;
+        }
+
+        #image-upload {
+            display: none;
+        }
+
+        #image-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 24px;
+            margin-top: 32px;
+        }
+
+        .cropper-wrapper {
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            padding: 16px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(30px);
+            -webkit-backdrop-filter: blur(30px);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            overflow: hidden;
+        }
+
+        .cropper-wrapper:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(10, 132, 255, 0.3);
+            transform: translateY(-4px);
+            box-shadow: 0 16px 48px rgba(10, 132, 255, 0.15);
+        }
+
+        .cropper-container {
+            max-width: 100%;
+            max-height: 400px;
+            margin-bottom: 12px;
+            border-radius: 12px;
+            overflow: hidden;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .cropper-container img {
+            max-width: 100%;
+            display: block;
+        }
+
+        .save-btn {
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #0a84ff 0%, #0066cc 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            display: block;
+            width: 100%;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 6px 20px rgba(10, 132, 255, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .save-btn:hover {
+            background: linear-gradient(135deg, #1a91ff 0%, #0052a3 100%);
+            box-shadow: 0 8px 28px rgba(10, 132, 255, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .save-btn:active {
+            transform: translateY(0);
+            box-shadow: 0 4px 12px rgba(10, 132, 255, 0.25);
+        }
+
+        .save-all-container {
+            margin-top: 40px;
+            padding-top: 32px;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            justify-content: center;
+        }
+
+        .save-all-btn {
+            padding: 12px 32px;
+            background: linear-gradient(135deg, #30b0ff 0%, #0099ff 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 8px 24px rgba(10, 132, 255, 0.35);
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            min-width: 200px;
+        }
+
+        .save-all-btn:hover {
+            background: linear-gradient(135deg, #40c0ff 0%, #1aafff 100%);
+            box-shadow: 0 12px 36px rgba(10, 132, 255, 0.45);
+            transform: translateY(-3px);
+        }
+
+        .save-all-btn:active {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(10, 132, 255, 0.3);
+        }
+
+        .save-all-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .notofication {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.9);
+            color: #ffffff;
+            padding: 14px 20px;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 500;
+            border: 1px solid rgba(10, 132, 255, 0.4);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            box-shadow: 0 8px 32px rgba(10, 132, 255, 0.2);
+            animation: slideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards, slideOut 0.3s cubic-bezier(0.4, 0, 0.2, 1) forwards 0.5s;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>✨ Image Cropper</h1>
+        <p>Drag and drop images or a folder to crop them to square format and save.</p>
+        
+        <div class="drop-zone" id="drop-zone">
+            <p>📁 Drag and drop a folder or images here</p>
+            <small>or click to browse</small>
+        </div>
+        
+        <input type="file" id="image-upload" multiple accept="image/*">
+
+        <div id="image-container"></div>
+
+        <div class="save-all-container" id="save-all-container" style="display: none;">
+            <button class="save-all-btn" id="save-all-btn">💾 Save All Images</button>
+        </div>
+    </div>
+
+    <div id="notification-container"></div>
+
+    <script>
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('image-upload');
+        const imageContainer = document.getElementById('image-container');
+        const saveAllContainer = document.getElementById('save-all-container');
+        const saveAllBtn = document.getElementById('save-all-btn');
+        
+        // Store croppers and files for save all functionality
+        const cropperData = [];
+
+        // Show notification function
+        function showNotification(message) {
+            const container = document.getElementById('notification-container');
+            const notification = document.createElement('div');
+            notification.className = 'notification';
+            notification.textContent = message;
+            container.appendChild(notification);
+            
+            // Remove notification after animation completes (0.8s total: 0.3s slide in + 0.5s wait + 0.3s slide out)
+            setTimeout(() => {
+                notification.remove();
+            }, 2000);
+        }
+
+        // Save a single image
+        async function saveImage(cropper, file) {
+            const croppedCanvas = cropper.getCroppedCanvas({
+                width: 768,
+                height: 768,
+            });
+            const dataUrl = croppedCanvas.toDataURL('image/png');
+            
+            return fetch('/save', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    image: dataUrl,
+                    filename: file.name
+                }),
+            })
+            .then(response => response.json());
+        }
+
+        // Save all images
+        saveAllBtn.addEventListener('click', async () => {
+            if (cropperData.length === 0) {
+                showNotification('No images to save');
+                return;
+            }
+
+            saveAllBtn.disabled = true;
+            saveAllBtn.textContent = '⏳ Saving...';
+
+            try {
+                // Save all images in parallel
+                const savePromises = cropperData.map(({ cropper, file }) => 
+                    saveImage(cropper, file)
+                );
+                await Promise.all(savePromises);
+                
+                showNotification(`✅ All ${cropperData.length} files saved`);
+            } catch (error) {
+                console.error('Error:', error);
+                showNotification('Error saving some images');
+            } finally {
+                saveAllBtn.disabled = false;
+                saveAllBtn.textContent = '💾 Save All Images';
+            }
+        });
+
+        // Click to browse
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        // Drag and drop events
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+            
+            const items = e.dataTransfer.items;
+            const files = [];
+
+            // Handle dropped items (folders and files)
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                if (item.kind === 'file') {
+                    const entry = item.webkitGetAsEntry();
+                    if (entry) {
+                        const extractedFiles = await extractFiles(entry);
+                        files.push(...extractedFiles);
+                    }
+                }
+            }
+
+            processFiles(files);
+        });
+
+        // File input change (from folder picker, file picker, or click)
+        fileInput.addEventListener('change', (e) => {
+            const files = Array.from(e.target.files).filter(f => f.type.startsWith('image/'));
+            processFiles(files);
+            // Reset input so user can upload same files again
+            fileInput.value = '';
+        });
+
+        // Recursively extract files from dropped folders
+        async function extractFiles(entry, path = '') {
+            const files = [];
+            if (entry.isFile) {
+                const file = await new Promise((resolve) => entry.file(resolve));
+                if (file.type.startsWith('image/')) {
+                    files.push(file);
+                }
+            } else if (entry.isDirectory) {
+                const reader = entry.createReader();
+                const entries = await new Promise((resolve) => {
+                    reader.readEntries(resolve);
+                });
+                for (const childEntry of entries) {
+                    const childFiles = await extractFiles(childEntry, path + entry.name + '/');
+                    files.push(...childFiles);
+                }
+            }
+            return files;
+        }
+
+        // Process all collected image files
+        function processFiles(files) {
+            for (const file of files) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const wrapper = document.createElement('div');
+                    wrapper.classList.add('cropper-wrapper');
+
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    
+                    const cropperDiv = document.createElement('div');
+                    cropperDiv.classList.add('cropper-container');
+                    cropperDiv.appendChild(img);
+
+                    const saveBtn = document.createElement('button');
+                    saveBtn.textContent = 'Save Cropped Image';
+                    saveBtn.classList.add('save-btn');
+
+                    wrapper.appendChild(cropperDiv);
+                    wrapper.appendChild(saveBtn);
+                    imageContainer.appendChild(wrapper);
+
+                    const cropper = new Cropper(img, {
+                        aspectRatio: 1 / 1,
+                        viewMode: 1,
+                    });
+
+                    // Store cropper and file data
+                    cropperData.push({ cropper, file });
+
+                    // Show save all button if we have images
+                    if (cropperData.length > 0) {
+                        saveAllContainer.style.display = 'block';
+                    }
+
+                    saveBtn.addEventListener('click', async () => {
+                        try {
+                            const data = await saveImage(cropper, file);
+                            showNotification(data.message);
+                        } catch (error) {
+                            console.error('Error:', error);
+                            showNotification('Error saving image.');
+                        }
+                    });
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,40 @@
+:root{--bg:#0b0f14;--accent:rgba(255,255,255,0.9);--muted:rgba(255,255,255,0.6)}
+html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+body{background:linear-gradient(180deg,#071018 0%,#0b1620 100%);color:var(--accent);overflow:hidden}
+.slideshow{position:fixed;inset:0;display:flex;align-items:center;justify-content:center}
+.slide{position:absolute;inset:0;background-size:cover;background-position:center center;transition:opacity 2.5s cubic-bezier(.22,.8,.18,1),transform 2.5s cubic-bezier(.22,.8,.18,1);opacity:0;transform:scale(1.02)}
+.slide.show{opacity:1;transform:scale(1);z-index:1}
+.controls{position:absolute;left:20px;right:20px;top:50%;transform:translateY(-50%);display:flex;justify-content:space-between;pointer-events:none}
+.btn{pointer-events:auto;background:linear-gradient(90deg,rgba(0,0,0,.35),rgba(0,0,0,.15));border:1px solid rgba(255,255,255,.06);color:var(--accent);padding:12px 16px;border-radius:10px;backdrop-filter:blur(6px);cursor:pointer}
+.btn:active{transform:scale(.98)}
+.icon-btn{pointer-events:auto;background:linear-gradient(90deg,rgba(0,0,0,.35),rgba(0,0,0,.15));border:1px solid rgba(255,255,255,.06);color:var(--accent);padding:8px 10px;border-radius:8px;backdrop-filter:blur(6px);cursor:pointer;font-size:16px}
+.icon-btn:active{transform:scale(.95)}
+.refresh-icon-btn{pointer-events:auto;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,.04);color:var(--accent);padding:8px 10px;border-radius:8px;backdrop-filter:blur(8px);cursor:pointer;font-size:18px;transition:all 0.2s}
+.refresh-icon-btn:hover{background:linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.04));border:1px solid rgba(255,255,255,.08)}
+.refresh-icon-btn:active{transform:scale(.95)}
+.bottom-bar{position:fixed;left:40%;transform:translateX(-50%);width:60%;max-width:650px;bottom:30px;scale:60%;display:flex;justify-content:center;align-items:center;gap:6px;padding:0;overflow:hidden}
+.search{background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.06);padding:10px 14px;border-radius:999px;display:flex;align-items:center;gap:10px;width:min(880px,90%)}
+.search input{flex:1;background:transparent;border:0;color:var(--accent);outline:none;font-size:16px}
+.search button{background:var(--accent);color:#0b0f14;padding:8px 12px;border-radius:999px;border:0;cursor:pointer}
+.refresh-btn{position:absolute;bottom:12px;right:12px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,.04);color:var(--accent);padding:8px 10px;border-radius:8px;backdrop-filter:blur(8px);cursor:pointer;font-size:18px;transition:all 0.2s}
+.refresh-btn:hover{background:linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.04));border:1px solid rgba(255,255,255,.08)}
+.refresh-btn:active{transform:scale(.95)}
+.side-panel-toggle{position:fixed;right:18px;top:18px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));border:1px solid rgba(255,255,255,.04);color:var(--accent);padding:8px 10px;border-radius:8px;backdrop-filter:blur(8px);cursor:pointer;font-size:18px;z-index:100;transition:all 0.2s}
+.side-panel-toggle:hover{background:linear-gradient(180deg,rgba(255,255,255,0.08),rgba(255,255,255,0.04));border:1px solid rgba(255,255,255,.08)}
+.side-panel{position:fixed;right:-360px;top:0;width:340px;height:100vh;background:linear-gradient(180deg,rgba(11,15,20,0.95),rgba(11,22,32,0.95));backdrop-filter:blur(12px);border-left:1px solid rgba(255,255,255,.06);transition:right 0.35s cubic-bezier(0.4,0,0.2,1);z-index:99;overflow-y:auto;display:flex;flex-direction:column}
+.side-panel.show{right:0}
+.side-panel-header{display:flex;justify-content:flex-end;padding:12px;border-bottom:1px solid rgba(255,255,255,.04)}
+.side-panel-close-btn{background:transparent;border:none;color:var(--accent);cursor:pointer;font-size:18px;padding:4px 8px;opacity:0.7;transition:opacity 0.2s}
+.side-panel-close-btn:hover{opacity:1}
+.side-panel-content{display:flex;flex-direction:column;gap:12px;padding:12px}
+.widget{min-width:100%;padding:10px 12px;border-radius:10px;background:linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02));backdrop-filter:blur(8px);color:var(--accent);border:1px solid rgba(255,255,255,.04);box-shadow:0 6px 18px rgba(2,6,23,0.6);transition:all 0.3s ease}
+.widget small{color:var(--muted)}
+.sys-widget .stat{font-weight:600;font-size:10px}
+
+@media (max-width:700px){.sys-widget{left:12px;top:92px;min-width:140px;width:44vw;padding:8px}}
+
+/* Canvas sizing inside system widget (compact bar chart) */
+.sys-widget canvas{width:100% !important;height:60px !important}
+
+/* Joke bar at top center */
+.joke-bar{display:none}
