@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en" class="finder-gallery">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Gallery - Finder Style</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="navbar.css">
+    <script src="navbar.js"></script>
+</head>
+<body class="finder-gallery">
+    <div class="toolbar">
+        <div class="toolbar-title">📁 output</div>
+        <div class="image-count" id="imageCount">0 items</div>
+        <button class="refresh-btn" onclick="loadImages()">↻ Refresh</button>
+    </div>
+
+    <div class="container">
+        <div class="loading" id="loading">Loading images...</div>
+        <div class="gallery" id="gallery"></div>
+        <div class="empty-state" id="emptyState" style="display: none;">
+            <div class="empty-state-icon">🖼️</div>
+            <div class="empty-state-text">No images found</div>
+            <div class="empty-state-subtext">The output folder is empty</div>
+        </div>
+    </div>
+
+    <div class="metadata-panel" id="metadataPanel">
+        <div class="metadata-header">
+            <h3>Image Metadata</h3>
+            <button class="metadata-close" onclick="closeMetadataPanel()">×</button>
+        </div>
+        <div class="metadata-image-preview">
+            <img id="previewImage" src="" alt="">
+        </div>
+        <div class="metadata-content" id="metadataContent">
+            <div class="metadata-loading">Loading metadata...</div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const gallery = document.getElementById('gallery');
+        const loading = document.getElementById('loading');
+        const emptyState = document.getElementById('emptyState');
+        const modal = document.getElementById('modal');
+        const modalImage = document.getElementById('modalImage');
+        const imageCount = document.getElementById('imageCount');
+
+        async function loadImages() {
+            loading.style.display = 'block';
+            gallery.style.display = 'none';
+            emptyState.style.display = 'none';
+
+            try {
+                const response = await fetch('/list-output-images');
+                const images = await response.json();
+
+                loading.style.display = 'none';
+
+                if (images.length === 0) {
+                    emptyState.style.display = 'block';
+                    imageCount.textContent = '0 items';
+                    return;
+                }
+
+                gallery.style.display = 'grid';
+                gallery.innerHTML = '';
+                imageCount.textContent = `${images.length} item${images.length !== 1 ? 's' : ''}`;
+
+                images.forEach(image => {
+                    const item = document.createElement('div');
+                    item.className = 'image-item';
+                    item.onclick = (e) => {
+                        if (!e.target.classList.contains('delete-btn')) {
+                            openMetadataPanel(image.name, image.path);
+                        }
+                    };
+
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'image-wrapper';
+
+                    const img = document.createElement('img');
+                    img.src = image.path;
+                    img.alt = image.name;
+                    img.loading = 'lazy';
+
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'delete-btn';
+                    deleteBtn.textContent = '×';
+                    deleteBtn.onclick = (e) => {
+                        e.stopPropagation();
+                        deleteImage(image.name, item);
+                    };
+
+                    const info = document.createElement('div');
+                    info.className = 'image-info';
+
+                    const name = document.createElement('div');
+                    name.className = 'image-name';
+                    name.textContent = image.name;
+
+                    const details = document.createElement('div');
+                    details.className = 'image-details';
+                    details.textContent = image.size;
+
+                    info.appendChild(name);
+                    info.appendChild(details);
+                    wrapper.appendChild(img);
+                    wrapper.appendChild(deleteBtn);
+                    item.appendChild(wrapper);
+                    item.appendChild(info);
+                    gallery.appendChild(item);
+                });
+            } catch (error) {
+                console.error('Error loading images:', error);
+                loading.textContent = 'Error loading images';
+            }
+        }
+
+        async function openMetadataPanel(filename, imagePath) {
+            const panel = document.getElementById('metadataPanel');
+            const previewImage = document.getElementById('previewImage');
+            const metadataContent = document.getElementById('metadataContent');
+            
+            previewImage.src = imagePath;
+            metadataContent.innerHTML = '<div class="metadata-loading">Loading metadata...</div>';
+            panel.classList.add('show');
+            
+            try {
+                const response = await fetch('/get-image-metadata', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ filename: filename })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok && data.text_inputs) {
+                    metadataContent.innerHTML = '';
+                    
+                    if (data.text_inputs.length > 0) {
+                        data.text_inputs.forEach(item => {
+                            const section = document.createElement('div');
+                            section.className = 'metadata-section';
+                            
+                            const heading = document.createElement('h4');
+                            heading.textContent = item.node_title;
+                            
+                            const textarea = document.createElement('textarea');
+                            textarea.className = 'metadata-textbox';
+                            textarea.readOnly = true;
+                            textarea.value = item.text;
+                            
+                            // Auto-resize textarea to fit content
+                            textarea.style.height = 'auto';
+                            textarea.style.height = textarea.scrollHeight + 'px';
+                            
+                            section.appendChild(heading);
+                            section.appendChild(textarea);
+                            metadataContent.appendChild(section);
+                        });
+                    } else {
+                        metadataContent.innerHTML = '<div class="metadata-empty">No text inputs found</div>';
+                    }
+                } else {
+                    metadataContent.innerHTML = '<div class="metadata-error">Error loading metadata</div>';
+                }
+            } catch (error) {
+                console.error('Error fetching metadata:', error);
+                metadataContent.innerHTML = '<div class="metadata-error">Error loading metadata</div>';
+            }
+        }
+
+        function closeMetadataPanel() {
+            document.getElementById('metadataPanel').classList.remove('show');
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function deleteImage(filename, itemElement) {
+            try {
+                const response = await fetch('/delete-output-image', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ filename: filename })
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    // Remove from page with animation
+                    itemElement.style.transition = 'opacity 0.3s, transform 0.3s';
+                    itemElement.style.opacity = '0';
+                    itemElement.style.transform = 'scale(0.8)';
+                    
+                    setTimeout(() => {
+                        itemElement.remove();
+                        // Update count
+                        const currentCount = document.querySelectorAll('.image-item').length;
+                        imageCount.textContent = `${currentCount} item${currentCount !== 1 ? 's' : ''}`;
+                        
+                        if (currentCount === 0) {
+                            gallery.style.display = 'none';
+                            emptyState.style.display = 'block';
+                        }
+                    }, 300);
+
+                    showToast('Image deleted');
+                } else {
+                    showToast('Error: ' + result.message);
+                }
+            } catch (error) {
+                console.error('Error deleting image:', error);
+                showToast('Error deleting image');
+            }
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.classList.add('show');
+            
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 2000);
+        }
+
+        // Close panel with Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeMetadataPanel();
+            }
+        });
+
+        // Load images on page load
+        loadImages();
+    </script>
+</body>
+</html>

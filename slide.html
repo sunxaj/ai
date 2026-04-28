@@ -5,26 +5,29 @@
 	<meta name="viewport" content="width=device-width,initial-scale=1" />
 	<title>®worksapce</title>
 	<link rel="stylesheet" href="styles.css">
+	<link rel="stylesheet" href="navbar.css">
+	<script src="navbar.js"></script>
 </head>
 <body>
 	<div class="slideshow" id="slideshow">
-		<!-- slides inserted by JS -->
+	<!-- slides inserted by JS 	-->
 	</div>
 
 	<div class="controls">
 		<div style="display:flex;align-items:center;gap:12px;pointer-events:auto;">
-			<button class="btn" id="prev">← </button>
+		    <button class="btn" style="opacity:0.1" id="prev">← </button>
 		</div>
 		<div style="display:flex;align-items:center;gap:12px;pointer-events:auto;">
-			<button class="btn" id="next"> →</button>
+		    <button class="btn" style="opacity:0.1" id="next"> →</button>
 		</div>
 	</div>
 
+
 	<!-- Side panel for widgets -->
-	<div class="side-panel-toggle" id="sidePanelToggle" title="Show widgets">+</div>
+	<div class="side-panel-toggle" id="sidePanelToggle" title="Show widgets">◎</div>
 	<div class="side-panel" id="sidePanel">
 		<div class="side-panel-header">
-			<button class="side-panel-close-btn" id="sidePanelClose" title="Hide widgets">−</button>
+			<button class="side-panel-close-btn" id="sidePanelClose" title="Hide widgets">◉</button>
 		</div>
 		<div class="side-panel-content">
 			<div class="widget" id="weather1">
@@ -40,6 +43,8 @@
 				<canvas id="sysChartCpu"></canvas>
 				<canvas id="sysChartMem"></canvas>
 			</div>
+
+			<button class="panel-link-btn" id="openCropper" title="Open image cropper">Image Cropper</button>
 		</div>
 		<button class="refresh-btn" id="refreshBtn" title="Refresh images">♻︎</button>
 	</div>
@@ -51,7 +56,7 @@
 	<div class="bottom-bar">
 		<form class="search" action="https://www.google.com/search" method="GET" target="_blank">
 			<input name="q" type="search" placeholder="" aria-label="Search Google">
-			<button type="submit" style="opacity:0.2">Search</button>
+			<button type="submit" style="opacity:0.5"> </button>
 		</form>
 	</div>
 
@@ -61,6 +66,7 @@
 		const sidePanelToggle = document.getElementById('sidePanelToggle');
 		const sidePanel = document.getElementById('sidePanel');
 		const sidePanelClose = document.getElementById('sidePanelClose');
+		let hoverTimer = null;
 
 		sidePanelToggle.addEventListener('click', () => {
 			sidePanel.classList.add('show');
@@ -68,6 +74,27 @@
 		});
 
 		sidePanelClose.addEventListener('click', () => {
+			sidePanel.classList.remove('show');
+			sidePanelToggle.style.display = 'block';
+		});
+
+		// Auto-expand on hover after 0.5s delay
+		sidePanelToggle.addEventListener('mouseenter', () => {
+			hoverTimer = setTimeout(() => {
+				sidePanel.classList.add('show');
+				sidePanelToggle.style.display = 'none';
+			}, 500);
+		});
+
+		sidePanelToggle.addEventListener('mouseleave', () => {
+			if(hoverTimer) {
+				clearTimeout(hoverTimer);
+				hoverTimer = null;
+			}
+		});
+
+		// Auto-hide side panel when mouse leaves
+		sidePanel.addEventListener('mouseleave', () => {
 			sidePanel.classList.remove('show');
 			sidePanelToggle.style.display = 'block';
 		});
@@ -155,6 +182,7 @@
 
 		// Wire up refresh button to reload image list without full page reload
 		const refreshBtn = document.getElementById('refreshBtn');
+		const bottomBar = document.querySelector('.bottom-bar');
 		if(refreshBtn){
 			refreshBtn.addEventListener('click', async (e)=>{
 				e.preventDefault();
@@ -165,8 +193,29 @@
 					currentFolder = currentFolder === 'prn' ? 'images' : 'prn';
 					await loadImagesFromServer();
 					show(0);
+					// Hide bottom bar when in prn folder, show when in images folder
+					if(bottomBar){
+						bottomBar.style.display = currentFolder === 'prn' ? 'none' : 'flex';
+					}
+					// Move refresh button: side panel when images, main page when prn
+					if(currentFolder === 'prn'){
+						refreshBtn.classList.add('refresh-btn-main');
+						refreshBtn.classList.remove('refresh-btn');
+						document.body.appendChild(refreshBtn);
+					} else {
+						refreshBtn.classList.remove('refresh-btn-main');
+						refreshBtn.classList.add('refresh-btn');
+						sidePanel.appendChild(refreshBtn);
+					}
 				}catch(err){ /* ignore */ }
 				setTimeout(()=>{ refreshBtn.innerHTML = prev; }, 700);
+			});
+		}
+
+		const openCropperBtn = document.getElementById('openCropper');
+		if(openCropperBtn){
+			openCropperBtn.addEventListener('click', () => {
+				window.open('image_cropper.html','_blank');
 			});
 		}
 
@@ -175,6 +224,9 @@
 
 		// Keyboard
 		window.addEventListener('keydown', (e)=>{ if(e.key==='ArrowRight') next(); if(e.key==='ArrowLeft') prev(); });
+
+		// Auto-advance every 13 seconds
+		setInterval(next, 13000);
 
 		// Weather for a single location: current + 5-day forecast (Open-Meteo)
 		async function fetchWeather(lat,lon,el, forecastContainer){

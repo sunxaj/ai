@@ -39,6 +39,14 @@ def stats():
     return response
 
 
+@app.route('/list-videos')
+def list_videos():
+    files = sorted(glob.glob('vd_h/*.mp4'))
+    files = [f.replace('\\', '/') for f in files]
+    response = make_response(jsonify(files))
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
+
 @app.route('/list-images')
 def list_images():
     # Return list of image paths from specified folder (default: prn)
@@ -58,6 +66,52 @@ def list_images():
     response = make_response(jsonify(files))
     response.headers['Access-Control-Allow-Origin'] = '*'
     return response
+
+@app.route('/list-output-images')
+def list_output_images():
+    # Return list of images from ../share/output folder
+    output_folder = os.path.join(os.path.dirname(__file__), '..', 'share', 'output')
+    output_folder = os.path.abspath(output_folder)
+    
+    if not os.path.exists(output_folder):
+        return jsonify([])
+    
+    patterns = ['*.png', '*.jpg', '*.jpeg', '*.webp']
+    files = []
+    for pattern in patterns:
+        files.extend(glob.glob(os.path.join(output_folder, pattern)))
+    
+    # Sort by modification time (newest first)
+    files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+    
+    # Create response with file info
+    result = []
+    for filepath in files:
+        filename = os.path.basename(filepath)
+        size_bytes = os.path.getsize(filepath)
+        # Format size
+        if size_bytes < 1024:
+            size_str = f"{size_bytes} B"
+        elif size_bytes < 1024 * 1024:
+            size_str = f"{size_bytes / 1024:.1f} KB"
+        else:
+            size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
+        
+        result.append({
+            'name': filename,
+            'path': f'/share-output/{filename}',
+            'size': size_str
+        })
+    
+    response = make_response(jsonify(result))
+    response.headers['Access-Control-Allow-Origin'] = '*'
+    return response
+
+@app.route('/share-output/<path:filename>')
+def serve_output_image(filename):
+    output_folder = os.path.join(os.path.dirname(__file__), '..', 'share', 'output')
+    output_folder = os.path.abspath(output_folder)
+    return send_from_directory(output_folder, filename)
 
 @app.route('/image-cropper')
 def image_cropper():
