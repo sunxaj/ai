@@ -1,20 +1,27 @@
 #!/usr/bin/env python3
 import base64
 import re
+import json
+import subprocess
 from flask import Flask, jsonify, request, send_from_directory, make_response, render_template
 import psutil
 import time
 import os
 import glob
-import hashlib
-from urllib.parse import urlparse
-import subprocess
 
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-THUMBNAILS_FOLDER = os.path.join(os.path.dirname(__file__), 'thumbnails')
-os.makedirs(THUMBNAILS_FOLDER, exist_ok=True)
+VIDEOS_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'videos')
+os.makedirs(VIDEOS_FOLDER, exist_ok=True)
+
+def resolve_video_folder(folder_param):
+    if not folder_param:
+        return VIDEOS_FOLDER
+    folder = os.path.abspath(folder_param)
+    if not os.path.isdir(folder):
+        return None
+    return folder
 
 app = Flask(__name__, static_folder='.', static_url_path='', template_folder='.')
 app.config['JSON_AS_ASCII'] = False
@@ -284,117 +291,117 @@ def save_cropped_image():
     except Exception as e:
         return jsonify({'message': f'Error saving image: {str(e)}'}), 500
 
-@app.route('/save-bookmarks', methods=['POST'])
-def save_bookmarks():
-    data = request.get_json()
-    if not data or 'html' not in data:
-        return jsonify({'message': 'Invalid data'}), 400
-    
+@app.route('/api/videos')
+def api_list_videos():
+    folder = resolve_video_folder(request.args.get('folder', ''))
+    if not folder:
+        return jsonify({'error': 'invalid folder'}), 400
+    files = sorted(glob.glob(os.path.join(folder, '*.mp4')))
+    result = []
+    for fp in files:
+        name = os.path.basename(fp)
+        result.append({'name': name, 'path': f'/api/video-file?folder={folder}&name={name}'})
+    return jsonify(result)
+
+@app.route('/api/video-file')
+def api_video_file():
+    folder = resolve_video_folder(request.args.get('folder', ''))
+    name = request.args.get('name', '')
+    if not folder or not name or '/' in name or '..' in name:
+        return '', 400
+    return send_from_directory(folder, name)
+
+@app.route('/api/video-meta')
+def api_video_meta():
+    name = request.args.get('name', '')
+    folder = resolve_video_folder(request.args.get('folder', ''))
+    if not folder or not name or '/' in name or '..' in name:
+        return jsonify({'error': 'invalid'}), 400
+    fp = os.path.join(folder, name)
+    if not os.path.exists(fp):
+        return jsonify({'error': 'not found'}), 404
     try:
-        filepath = os.path.join(os.path.dirname(__file__), 'my_bookmarks.html')
-        with open(filepath, 'w', encoding='utf-8') as f:
-            f.write(data['html'])
-        return jsonify({'message': 'Bookmarks saved successfully'}), 200
+        probe = subprocess.run(
+            ['ffprobe', '-v', 'quiet', '-print_format', 'json', '-show_streams', '-show_format', fp],
+            capture_output=True, text=True, timeout=15
+        )
+        data = json.loads(probe.stdout)
+        fmt = data.get('format', {})
+        video_stream = next((s for s in data.get('streams', []) if s.get('codec_type') == 'video'), {})
+        duration = float(fmt.get('duration', 0))
+        r_frame_rate = video_stream.get('r_frame_rate', '0/1')
+        num, den = (int(x) for x in r_frame_rate.split('/'))
+        fps = round(num / den, 3) if den else 0
+        nb_frames = video_stream.get('nb_frames')
+        total_frames = int(nb_frames) if nb_frames and nb_frames != 'N/A' else round(duration * fps)
+        stat = os.stat(fp)
+        creation_info = fmt.get('tags', {}).get('description', '') or fmt.get('tags', {}).get('comment', '')
+        return jsonify({
+            'name': name,
+            'size_bytes': stat.st_size,
+            'created': stat.st_birthtime if hasattr(stat, 'st_birthtime') else stat.st_mtime,
+            'duration': duration,
+            'width': video_stream.get('width', 0),
+            'height': video_stream.get('height', 0),
+            'fps': fps,
+            'total_frames': total_frames,
+            'creation_info': creation_info,
+        })
     except Exception as e:
-        return jsonify({'message': f'Error saving bookmarks: {str(e)}'}), 500
+        return jsonify({'error': str(e)}), 500
 
-@app.route('/load-bookmarks')
-def load_bookmarks():
-    try:
-        filepath = os.path.join(os.path.dirname(__file__), 'my_bookmarks.html')
-        if os.path.exists(filepath):
-            with open(filepath, 'r', encoding='utf-8') as f:
-                content = f.read()
-            return content, 200, {'Content-Type': 'text/html; charset=utf-8'}
-        else:
-            return '', 204
-    except Exception as e:
-        return jsonify({'message': f'Error loading bookmarks: {str(e)}'}), 500
-
-@app.route('/generate-thumbnail', methods=['POST'])
-def generate_thumbnail():
+@app.route('/api/video-update-meta', methods=['POST'])
+def api_video_update_meta():
     data = request.get_json()
-    if not data or 'url' not in data or 'id' not in data:
-        return jsonify({'message': 'Invalid data'}), 400
-    
-    url = data['url']
-    bookmark_id = data['id']
-    
-    # Generate filename from bookmark ID
-    filename = f"{bookmark_id}.png"
-    filepath = os.path.join(THUMBNAILS_FOLDER, filename)
-    
-    # Check if thumbnail already exists
-    if os.path.exists(filepath):
-        print(f"Thumbnail already exists for {url} at {filepath}")
-        return jsonify({'exists': True, 'path': f'/thumbnails/{filename}'}), 200
-
-    
+    name = data.get('name', '')
+    folder = resolve_video_folder(data.get('folder', ''))
+    creation_info = data.get('creation_info', '')
+    if not folder or not name or '/' in name or '..' in name:
+        return jsonify({'error': 'invalid'}), 400
+    fp = os.path.join(folder, name)
+    if not os.path.exists(fp):
+        return jsonify({'error': 'not found'}), 404
+    tmp = fp + '.tmp.mp4'
     try:
-        # Use playwright to take screenshot
-        # First check if playwright is available
+        result = subprocess.run(
+            ['ffmpeg', '-i', fp, '-c', 'copy',
+             '-metadata', f'description={creation_info}',
+             '-metadata', f'comment={creation_info}',
+             tmp, '-y'],
+            capture_output=True, text=True, timeout=60
+        )
+        if result.returncode != 0:
+            return jsonify({'error': result.stderr[-300:]}), 500
+        os.replace(tmp, fp)
+        return jsonify({'ok': True})
+    except Exception as e:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/video-delete', methods=['POST'])
+def api_video_delete():
+    data = request.get_json()
+    names = data.get('names', [])
+    folder = resolve_video_folder(data.get('folder', ''))
+    if not folder:
+        return jsonify({'error': 'invalid folder'}), 400
+    deleted, errors = [], []
+    for name in names:
+        if not name or '/' in name or '..' in name:
+            errors.append(name)
+            continue
+        fp = os.path.join(folder, name)
         try:
-            print("Checking for Playwright availability...")
-            result = subprocess.run(
-                ['python3', '-c', 'from playwright.sync_api import sync_playwright'],
-                capture_output=True,
-                timeout=5
-            )
-            playwright_available = result.returncode == 0
-        except:
-            playwright_available = False
-        
-        if playwright_available:
-            # Use playwright to capture screenshot
-            screenshot_script = f'''
-from playwright.sync_api import sync_playwright
-import sys
+            os.remove(fp)
+            deleted.append(name)
+        except Exception as e:
+            errors.append(name)
+    return jsonify({'deleted': deleted, 'errors': errors})
 
-url = "{url}"
-filepath = "{filepath}"
-
-try:
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        page = browser.new_page(viewport={{"width": 640, "height": 400}})
-        page.goto(url, wait_until="networkidle", timeout=30000)
-        page.screenshot(path=filepath, full_page=False)
-        browser.close()
-    print("SUCCESS")
-except Exception as e:
-    print(f"ERROR: {{e}}")
-    sys.exit(1)
-'''
-            result = subprocess.run(
-                ['python3', '-c', screenshot_script],
-                capture_output=True,
-                timeout=40,
-                text=True
-            )
-            
-            if result.returncode == 0 and os.path.exists(filepath):
-                print(f"Thumbnail generated for {url} at {filepath}")
-                return jsonify({'exists': False, 'path': f'/thumbnails/{filename}', 'success': True}), 200
-            else:
-                print(f"Failed to generate thumbnail for {url}: {result.stderr}")
-                return jsonify({'message': 'Failed to generate thumbnail', 'error': result.stderr}), 500
-        else:
-            # Playwright not available, create placeholder
-            return jsonify({'message': 'Playwright not installed', 'exists': False}), 400
-            
-    except subprocess.TimeoutExpired:
-        return jsonify({'message': 'Thumbnail generation timeout'}), 500
-    except Exception as e:
-        return jsonify({'message': f'Error generating thumbnail: {str(e)}'}), 500
-
-@app.route('/thumbnails/<path:filename>')
-def serve_thumbnail(filename):
-    filepath = os.path.join(THUMBNAILS_FOLDER, filename)
-    if os.path.exists(filepath):
-        return send_from_directory(THUMBNAILS_FOLDER, filename)
-    else:
-        # Return 404 but don't log it as an error
-        return '', 404
+@app.route('/videos/<path:filename>')
+def serve_video(filename):
+    return send_from_directory(VIDEOS_FOLDER, filename)
 
 @app.route('/', defaults={'path': 'slide.html'})
 @app.route('/<path:path>')

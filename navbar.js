@@ -5,11 +5,10 @@
         <nav class="macos-navbar" id="macosNavbar">
             <a href="/slide.html">Slideshow</a>
             <a href="/metadata.html">Gallery</a>
-            <a href="/bookmarks.html">Bookmarks</a>
+            <a href="/videos.html">Videos</a>
             <a href="/cropper.html">Cropper</a>
             <span class="separator"></span>
             <a href="http://192.168.0.222:8188/" target="_blank">Comfyui</a>
-            <a href="/game.html">Game</a>
         </nav>
     `;
     
