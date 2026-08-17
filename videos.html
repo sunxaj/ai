@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Videos</title>
+  <link rel="stylesheet" href="/navbar.css"/>
+  <script src="/navbar.js" defer></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{background:#111;color:#e0e0e0;font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text',sans-serif;display:flex;height:100vh;overflow:hidden}
+
+    /* ── Left panel ── */
+    #left{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;padding-top:40px}
+    #toolbar{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#1c1c1e;border-bottom:1px solid #2c2c2e;flex-shrink:0}
+    #toolbar h1{font-size:15px;font-weight:600;color:#fff;margin-right:auto}
+    #folderPath{font-size:12px;color:#aeaeb2;background:#2c2c2e;border:1px solid #3a3a3c;border-radius:6px;padding:4px 8px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:default}
+    #folderBtn{background:#2c2c2e;color:#e0e0e0;border:1px solid #3a3a3c;border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;flex-shrink:0}
+    #folderBtn:hover{background:#3a3a3c}
+    #count{font-size:12px;color:#636366}
+
+    #grid{flex:1;overflow-y:auto;padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;align-content:start}
+    #empty{padding:40px;color:#636366;font-size:14px;text-align:center;grid-column:1/-1}
+
+    .card{background:#1c1c1e;border-radius:10px;overflow:hidden;cursor:pointer;border:2px solid transparent;transition:border-color .15s,transform .1s;position:relative}
+    .card:hover{border-color:#3a3a3c}
+    .card.active{border-color:#30d158}
+    .del-btn{position:absolute;top:5px;left:5px;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.7);border:none;color:#fff;font-size:13px;cursor:pointer;display:none;align-items:center;justify-content:center;z-index:3;padding:0}
+    .del-btn:hover{background:#ff3b30}
+    .card:hover .del-btn{display:flex}
+
+    .thumb-wrap{position:relative;width:100%;aspect-ratio:16/9;background:#000;overflow:hidden}
+    .thumb-wrap img{width:100%;height:100%;object-fit:cover;display:block}
+    .thumb-placeholder{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:28px;color:#3a3a3c}
+
+    .play-btn{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .15s}
+    .card:hover .play-btn{opacity:1}
+    .play-btn span{background:rgba(0,0,0,.6);border-radius:50%;width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:18px}
+
+
+    .card-name{padding:7px 10px;font-size:12px;color:#aeaeb2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+    /* ── Right panel ── */
+    #resizer{width:5px;flex-shrink:0;cursor:col-resize;background:transparent;transition:background .15s;z-index:1}
+    #resizer:hover,#resizer.dragging{background:#0a84ff}
+    #right{width:300px;min-width:200px;max-width:80vw;flex-shrink:0;background:#1c1c1e;display:flex;flex-direction:column;overflow:hidden}
+    #right.hidden,#resizer.hidden{display:none}
+    #right.hidden{display:none}
+    #detail-header{padding:10px 14px;border-bottom:1px solid #2c2c2e;font-size:13px;font-weight:600;color:#fff;word-break:break-all}
+    #detail-body{flex:1;overflow-y:auto;padding:10px 14px;display:flex;flex-direction:column;gap:0;min-height:0}
+    .meta-row{display:flex;justify-content:space-between;align-items:baseline;padding:3px 0;border-bottom:1px solid #2c2c2e22}
+    .meta-row:last-of-type{border-bottom:none}
+    .meta-label{font-size:11px;color:#636366;flex-shrink:0;margin-right:8px}
+    .meta-value{font-size:12px;color:#e0e0e0;text-align:right}
+    .creation-section{margin-top:8px;display:flex;flex-direction:column;gap:4px;flex:1}
+    .creation-label{font-size:11px;color:#636366}
+    #creation-info-area{flex:1;min-height:200px;width:100%;background:#2c2c2e;color:#e0e0e0;border:1px solid #3a3a3c;border-radius:6px;padding:8px;font-size:12px;resize:none;font-family:inherit;line-height:1.5}
+    #creation-info-area:focus{outline:none;border-color:#0a84ff}
+    #saveMetaBtn{background:#0a84ff;color:#fff;border:none;border-radius:6px;padding:6px;font-size:12px;cursor:pointer;width:100%;margin-top:6px}
+    #saveMetaBtn:hover{background:#409cff}
+    #saveStatus{font-size:11px;color:#30d158;text-align:center;min-height:14px;margin-top:2px}
+
+    /* ── Video overlay ── */
+    #overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:9999;align-items:center;justify-content:center}
+    #overlay.show{display:flex}
+    #vplayer{max-width:92vw;max-height:92vh;outline:none;border-radius:8px}
+    #closeBtn{position:absolute;top:14px;right:18px;background:rgba(255,255,255,.15);border:none;color:#fff;font-size:18px;width:34px;height:34px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center}
+    #closeBtn:hover{background:rgba(255,255,255,.25)}
+  </style>
+</head>
+<body>
+
+<div id="left">
+  <div id="toolbar">
+    <h1>🎬 Videos</h1>
+    <span id="folderPath">./videos</span>
+    <button id="folderBtn">📁 Folder</button>
+    <span id="count"></span>
+  </div>
+  <!-- hidden folder input -->
+  <input type="file" id="folderInput" webkitdirectory style="display:none"/>
+  <div id="grid"><div id="empty" style="display:none">No videos found in ./videos</div></div>
+</div>
+
+<div id="resizer" class="hidden"></div>
+<div id="right" class="hidden">
+  <div id="detail-header">—</div>
+  <div id="detail-body">
+    <div class="meta-row"><span class="meta-label">Created</span><span class="meta-value" id="m-created">—</span></div>
+    <div class="meta-row"><span class="meta-label">Resolution</span><span class="meta-value" id="m-res">—</span></div>
+    <div class="meta-row"><span class="meta-label">Duration</span><span class="meta-value" id="m-dur">—</span></div>
+    <div class="meta-row"><span class="meta-label">Total Frames</span><span class="meta-value" id="m-frames">—</span></div>
+    <div class="meta-row"><span class="meta-label">Frame Rate</span><span class="meta-value" id="m-fps">—</span></div>
+    <div class="meta-row"><span class="meta-label">File Size</span><span class="meta-value" id="m-size">—</span></div>
+    <div class="creation-section">
+      <span class="creation-label">Creation Info</span>
+      <textarea id="creation-info-area" placeholder="Enter creation info…"></textarea>
+      <button id="saveMetaBtn">Save</button>
+      <div id="saveStatus"></div>
+    </div>
+  </div>
+</div>
+
+<div id="overlay">
+  <button id="closeBtn">✕</button>
+  <video id="vplayer" controls playsinline></video>
+</div>
+
+<script>
+const grid = document.getElementById('grid');
+const empty = document.getElementById('empty');
+const right = document.getElementById('right');
+const overlay = document.getElementById('overlay');
+const vplayer = document.getElementById('vplayer');
+const countEl = document.getElementById('count');
+const saveStatus = document.getElementById('saveStatus');
+const folderBtn = document.getElementById('folderBtn');
+const folderInput = document.getElementById('folderInput');
+const folderPath = document.getElementById('folderPath');
+
+let currentFolder = '';
+let videos = [];       // [{name, path}]
+let activeCard = null;
+
+// ── Helpers ──────────────────────────────────────────────
+function fmtDuration(s) {
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
+  return h ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
+}
+function fmtSize(b) {
+  if (b > 1e9) return (b/1e9).toFixed(2)+' GB';
+  if (b > 1e6) return (b/1e6).toFixed(1)+' MB';
+  return (b/1e3).toFixed(0)+' KB';
+}
+function fmtDate(ts) {
+  return new Date(ts * 1000).toLocaleString();
+}
+function updateToolbar() {
+  countEl.textContent = `${videos.length} video${videos.length !== 1 ? 's' : ''}`;
+}
+
+// ── Folder picker ───────────────────────────────────────────
+folderBtn.addEventListener('click', () => folderInput.click());
+folderInput.addEventListener('change', () => {
+  const files = folderInput.files;
+  if (!files.length) return;
+  // Get the folder path from the first file's webkitRelativePath
+  const rel = files[0].webkitRelativePath;
+  const folder = rel.split('/')[0];
+  // Build absolute-ish path by finding mp4s among selected files
+  const mp4s = Array.from(files).filter(f => f.name.toLowerCase().endsWith('.mp4'));
+  if (!mp4s.length) { alert('No MP4 files found in selected folder.'); return; }
+  // Use object URLs to play directly — derive folder label
+  currentFolder = '__local__';
+  folderPath.textContent = folder;
+  folderPath.title = folder;
+  loadVideosFromFiles(mp4s);
+  folderInput.value = '';
+});
+
+function loadVideosFromFiles(files) {
+  // Clear grid
+  grid.querySelectorAll('.card').forEach(c => c.remove());
+  activeCard = null;
+  right.classList.add('hidden');
+  resizer.classList.add('hidden');
+  videos = files.map(f => ({ name: f.name, path: URL.createObjectURL(f), local: true }));
+  empty.style.display = videos.length ? 'none' : 'block';
+  videos.forEach(v => grid.appendChild(buildCard(v)));
+  updateToolbar();
+}
+
+// ── Thumbnail (last frame) ───────────────────────────────
+function buildThumbStrip(card, path) {
+  const placeholder = card.querySelector('.thumb-placeholder');
+  const vid = document.createElement('video');
+  vid.src = path;
+  vid.muted = true;
+  vid.playsInline = true;
+  vid.preload = 'metadata';
+
+  vid.addEventListener('loadedmetadata', () => { vid.currentTime = vid.duration; });
+  vid.addEventListener('seeked', () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = vid.videoWidth || 320;
+    canvas.height = vid.videoHeight || 180;
+    canvas.getContext('2d').drawImage(vid, 0, 0);
+    const img = document.createElement('img');
+    img.src = canvas.toDataURL('image/jpeg', 0.85);
+    placeholder.replaceWith(img);
+    vid.src = '';
+  }, {once: true});
+}
+
+// ── Build card ───────────────────────────────────────────
+function buildCard(video) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.dataset.name = video.name;
+  card.innerHTML = `
+    <button class="del-btn" title="Delete">✕</button>
+    <div class="thumb-wrap">
+      <div class="thumb-placeholder">🎬</div>
+      <div class="play-btn"><span>▶</span></div>
+    </div>
+    <div class="card-name">${video.name}</div>`;
+
+  const delBtn = card.querySelector('.del-btn');
+  const playBtn = card.querySelector('.play-btn');
+
+  delBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    if (!confirm(`Delete "${video.name}"?`)) return;
+    if (video.local) {
+      card.remove();
+      videos = videos.filter(v => v.name !== video.name);
+      if (activeCard === card) { activeCard = null; right.classList.add('hidden'); resizer.classList.add('hidden'); }
+      updateToolbar();
+      if (!videos.length) empty.style.display = 'block';
+      return;
+    }
+    fetch('/api/video-delete', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({names: [video.name], folder: currentFolder})
+    }).then(r => r.json()).then(d => {
+      if (d.deleted.length) {
+        card.remove();
+        videos = videos.filter(v => v.name !== video.name);
+        if (activeCard === card) { activeCard = null; right.classList.add('hidden'); resizer.classList.add('hidden'); }
+        updateToolbar();
+        if (!videos.length) empty.style.display = 'block';
+      }
+    });
+  });
+
+  playBtn.addEventListener('click', e => {
+    e.stopPropagation();
+    playVideo(video.path);
+  });
+
+  card.addEventListener('click', () => selectDetail(video, card));
+
+  buildThumbStrip(card, video.path);
+  return card;
+}
+
+// ── Detail panel ─────────────────────────────────────────
+function selectDetail(video, card) {
+  if (activeCard) activeCard.classList.remove('active');
+  activeCard = card;
+  card.classList.add('active');
+  right.classList.remove('hidden');
+  resizer.classList.remove('hidden');
+  document.getElementById('detail-header').textContent = video.name;
+  ['m-created','m-res','m-dur','m-frames','m-fps','m-size'].forEach(id => document.getElementById(id).textContent = '…');
+  document.getElementById('creation-info-area').value = '';
+  saveStatus.textContent = '';
+
+  fetch(`/api/video-meta?name=${encodeURIComponent(video.name)}&folder=${encodeURIComponent(currentFolder)}`)
+    .then(r => r.json())
+    .then(m => {
+      if (m.error) return;
+      document.getElementById('m-created').textContent = fmtDate(m.created);
+      document.getElementById('m-res').textContent = `${m.width} × ${m.height}`;
+      document.getElementById('m-dur').textContent = fmtDuration(m.duration);
+      document.getElementById('m-frames').textContent = m.total_frames.toLocaleString();
+      document.getElementById('m-fps').textContent = m.fps + ' fps';
+      document.getElementById('m-size').textContent = fmtSize(m.size_bytes);
+      document.getElementById('creation-info-area').value = m.creation_info || '';
+      document.getElementById('saveMetaBtn').dataset.name = video.name;
+      document.getElementById('saveMetaBtn').dataset.folder = currentFolder;
+    })
+    .catch(() => {});
+
+  // For local files, extract basic info client-side
+  if (video.local) {
+    const v = document.createElement('video');
+    v.src = video.path;
+    v.preload = 'metadata';
+    v.addEventListener('loadedmetadata', () => {
+      document.getElementById('m-res').textContent = `${v.videoWidth} × ${v.videoHeight}`;
+      document.getElementById('m-dur').textContent = fmtDuration(v.duration);
+      document.getElementById('m-created').textContent = '—';
+      document.getElementById('m-frames').textContent = '—';
+      document.getElementById('m-fps').textContent = '—';
+      document.getElementById('m-size').textContent = '—';
+      v.src = '';
+    });
+    document.getElementById('saveMetaBtn').dataset.name = video.name;
+    document.getElementById('saveMetaBtn').dataset.folder = currentFolder;
+  }
+}
+
+// ── Save metadata ─────────────────────────────────────────
+document.getElementById('saveMetaBtn').addEventListener('click', () => {
+  const name = document.getElementById('saveMetaBtn').dataset.name;
+  const folder = document.getElementById('saveMetaBtn').dataset.folder;
+  if (!name || folder === '__local__') return;
+  const creation_info = document.getElementById('creation-info-area').value;
+  saveStatus.textContent = 'Saving…';
+  saveStatus.style.color = '#aeaeb2';
+  fetch('/api/video-update-meta', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name, folder, creation_info})
+  })
+  .then(r => r.json())
+  .then(d => {
+    saveStatus.textContent = d.ok ? '✓ Saved' : '✗ ' + (d.error || 'Error');
+    saveStatus.style.color = d.ok ? '#30d158' : '#ff3b30';
+  });
+});
+
+// ── Play overlay ──────────────────────────────────────────
+function playVideo(src) {
+  vplayer.src = src;
+  overlay.classList.add('show');
+  vplayer.play();
+}
+document.getElementById('closeBtn').addEventListener('click', () => {
+  vplayer.pause(); vplayer.src = '';
+  overlay.classList.remove('show');
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('closeBtn').click();
+});
+
+// ── Resizer ──────────────────────────────────────────────
+const resizer = document.getElementById('resizer');
+resizer.addEventListener('mousedown', e => {
+  e.preventDefault();
+  resizer.classList.add('dragging');
+  const startX = e.clientX;
+  const startW = right.offsetWidth;
+  function onMove(e) {
+    const w = Math.max(200, Math.min(window.innerWidth * 0.8, startW + startX - e.clientX));
+    right.style.width = w + 'px';
+  }
+  function onUp() {
+    resizer.classList.remove('dragging');
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('mouseup', onUp);
+  }
+  document.addEventListener('mousemove', onMove);
+  document.addEventListener('mouseup', onUp);
+});
+
+// ── Load videos ───────────────────────────────────────────
+fetch('/api/videos')
+  .then(r => r.json())
+  .then(data => {
+    currentFolder = '';
+    folderPath.textContent = './videos';
+    videos = data;
+    if (!videos.length) { empty.style.display = 'block'; updateToolbar(); return; }
+    videos.forEach(v => grid.appendChild(buildCard(v)));
+    updateToolbar();
+  })
+  .catch(() => { empty.style.display = 'block'; });
+</script>
+</body>
+</html>
