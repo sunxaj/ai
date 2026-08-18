@@ -19,6 +19,13 @@
     #folderBtn:hover{background:#3a3a3c}
     #count{font-size:12px;color:#636366}
 
+    #pager{display:flex;align-items:center;justify-content:center;gap:12px;padding:8px 14px;background:#1c1c1e;border-top:1px solid #2c2c2e;flex-shrink:0}
+    #pager.hidden{display:none}
+    #pager button{background:#2c2c2e;color:#e0e0e0;border:1px solid #3a3a3c;border-radius:6px;padding:5px 14px;font-size:12px;cursor:pointer}
+    #pager button:hover:not(:disabled){background:#3a3a3c}
+    #pager button:disabled{opacity:.35;cursor:default}
+    #pageInfo{font-size:12px;color:#aeaeb2;min-width:120px;text-align:center}
+
     #grid{flex:1;overflow-y:auto;padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;align-content:start}
     #empty{padding:40px;color:#636366;font-size:14px;text-align:center;grid-column:1/-1}
 
@@ -80,6 +87,11 @@
   <!-- hidden folder input -->
   <input type="file" id="folderInput" webkitdirectory style="display:none"/>
   <div id="grid"><div id="empty" style="display:none">No videos found in ./videos</div></div>
+  <div id="pager" class="hidden">
+    <button id="prevPage" type="button">← Previous</button>
+    <span id="pageInfo">Page 1 of 1</span>
+    <button id="nextPage" type="button">Next →</button>
+  </div>
 </div>
 
 <div id="resizer" class="hidden"></div>
@@ -117,9 +129,19 @@ const saveStatus = document.getElementById('saveStatus');
 const folderBtn = document.getElementById('folderBtn');
 const folderInput = document.getElementById('folderInput');
 const folderPath = document.getElementById('folderPath');
+const pager = document.getElementById('pager');
+const prevPageBtn = document.getElementById('prevPage');
+const nextPageBtn = document.getElementById('nextPage');
+const pageInfo = document.getElementById('pageInfo');
 
+const PAGE_SIZE = 20;
 let currentFolder = '';
-let videos = [];       // [{name, path}]
+let videos = [];       // current page [{name, path, thumbnail?}]
+let allLocalVideos = []; // full list when using folder picker
+let currentPage = 1;
+let totalVideos = 0;
+let totalPages = 0;
+let isLocalMode = false;
 let activeCard = null;
 
 // ── Helpers ──────────────────────────────────────────────
@@ -136,8 +158,49 @@ function fmtDate(ts) {
   return new Date(ts * 1000).toLocaleString();
 }
 function updateToolbar() {
-  countEl.textContent = `${videos.length} video${videos.length !== 1 ? 's' : ''}`;
+  const total = isLocalMode ? allLocalVideos.length : totalVideos;
+  countEl.textContent = `${total} video${total !== 1 ? 's' : ''}`;
+  updatePager();
 }
+
+function updatePager() {
+  const show = totalPages > 1;
+  pager.classList.toggle('hidden', !show);
+  if (!show) return;
+  pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+  prevPageBtn.disabled = currentPage <= 1;
+  nextPageBtn.disabled = currentPage >= totalPages;
+}
+
+function clearGrid() {
+  grid.querySelectorAll('.card').forEach(c => c.remove());
+  activeCard = null;
+  right.classList.add('hidden');
+  resizer.classList.add('hidden');
+}
+
+function renderVideos(list) {
+  clearGrid();
+  videos = list;
+  empty.style.display = videos.length ? 'none' : 'block';
+  videos.forEach(v => grid.appendChild(buildCard(v)));
+  updateToolbar();
+  grid.scrollTop = 0;
+}
+
+function goToPage(page) {
+  if (page < 1 || (totalPages && page > totalPages)) return;
+  currentPage = page;
+  if (isLocalMode) {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    renderVideos(allLocalVideos.slice(start, start + PAGE_SIZE));
+    return;
+  }
+  loadServerPage();
+}
+
+prevPageBtn.addEventListener('click', () => goToPage(currentPage - 1));
+nextPageBtn.addEventListener('click', () => goToPage(currentPage + 1));
 
 // ── Folder picker ───────────────────────────────────────────
 folderBtn.addEventListener('click', () => folderInput.click());
@@ -152,6 +215,7 @@ folderInput.addEventListener('change', () => {
   if (!mp4s.length) { alert('No MP4 files found in selected folder.'); return; }
   // Use object URLs to play directly — derive folder label
   currentFolder = '__local__';
+  isLocalMode = true;
   folderPath.textContent = folder;
   folderPath.title = folder;
   loadVideosFromFiles(mp4s);
@@ -159,18 +223,32 @@ folderInput.addEventListener('change', () => {
 });
 
 function loadVideosFromFiles(files) {
-  // Clear grid
-  grid.querySelectorAll('.card').forEach(c => c.remove());
-  activeCard = null;
-  right.classList.add('hidden');
-  resizer.classList.add('hidden');
-  videos = files.map(f => ({ name: f.name, path: URL.createObjectURL(f), local: true }));
-  empty.style.display = videos.length ? 'none' : 'block';
-  videos.forEach(v => grid.appendChild(buildCard(v)));
-  updateToolbar();
+  allLocalVideos = files.map(f => ({ name: f.name, path: URL.createObjectURL(f), local: true }));
+  totalVideos = allLocalVideos.length;
+  totalPages = Math.ceil(totalVideos / PAGE_SIZE) || 0;
+  currentPage = 1;
+  goToPage(1);
 }
 
-// ── Thumbnail (last frame) ───────────────────────────────
+// ── Thumbnail ───────────────────────────────────────────
+function loadThumbnail(card, video) {
+  const placeholder = card.querySelector('.thumb-placeholder');
+  if (!video.thumbnail) {
+    buildThumbStrip(card, video.path);
+    return;
+  }
+  const img = document.createElement('img');
+  img.alt = video.name;
+  img.onerror = () => {
+    const ph = document.createElement('div');
+    ph.className = 'thumb-placeholder';
+    ph.textContent = '🎬';
+    img.replaceWith(ph);
+  };
+  placeholder.replaceWith(img);
+  img.src = video.thumbnail;
+}
+
 function buildThumbStrip(card, path) {
   const placeholder = card.querySelector('.thumb-placeholder');
   const vid = document.createElement('video');
@@ -213,10 +291,15 @@ function buildCard(video) {
     if (!confirm(`Delete "${video.name}"?`)) return;
     if (video.local) {
       card.remove();
-      videos = videos.filter(v => v.name !== video.name);
-      if (activeCard === card) { activeCard = null; right.classList.add('hidden'); resizer.classList.add('hidden'); }
-      updateToolbar();
-      if (!videos.length) empty.style.display = 'block';
+      allLocalVideos = allLocalVideos.filter(v => v.name !== video.name);
+      totalVideos = allLocalVideos.length;
+      totalPages = Math.ceil(totalVideos / PAGE_SIZE) || 0;
+      if (!totalVideos) {
+        renderVideos([]);
+        return;
+      }
+      if (currentPage > totalPages) currentPage = totalPages;
+      goToPage(currentPage);
       return;
     }
     fetch('/api/video-delete', {
@@ -225,11 +308,14 @@ function buildCard(video) {
       body: JSON.stringify({names: [video.name], folder: currentFolder})
     }).then(r => r.json()).then(d => {
       if (d.deleted.length) {
-        card.remove();
-        videos = videos.filter(v => v.name !== video.name);
-        if (activeCard === card) { activeCard = null; right.classList.add('hidden'); resizer.classList.add('hidden'); }
-        updateToolbar();
-        if (!videos.length) empty.style.display = 'block';
+        totalVideos = Math.max(0, totalVideos - 1);
+        totalPages = Math.ceil(totalVideos / PAGE_SIZE) || 0;
+        if (!totalVideos) {
+          renderVideos([]);
+          return;
+        }
+        if (currentPage > totalPages) currentPage = totalPages;
+        goToPage(currentPage);
       }
     });
   });
@@ -241,7 +327,7 @@ function buildCard(video) {
 
   card.addEventListener('click', () => selectDetail(video, card));
 
-  buildThumbStrip(card, video.path);
+  loadThumbnail(card, video);
   return card;
 }
 
@@ -347,15 +433,38 @@ resizer.addEventListener('mousedown', e => {
 });
 
 // ── Load videos ───────────────────────────────────────────
-fetch('/api/videos')
+function loadServerPage() {
+  const params = new URLSearchParams({
+    page: String(currentPage),
+    per_page: String(PAGE_SIZE),
+  });
+  if (currentFolder) params.set('folder', currentFolder);
+  fetch(`/api/videos?${params}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        empty.style.display = 'block';
+        return;
+      }
+      totalVideos = data.total;
+      totalPages = data.total_pages;
+      currentPage = data.page;
+      renderVideos(data.videos);
+    })
+    .catch(() => { empty.style.display = 'block'; });
+}
+
+fetch('/api/videos?per_page=' + PAGE_SIZE)
   .then(r => r.json())
   .then(data => {
     currentFolder = '';
+    isLocalMode = false;
     folderPath.textContent = './videos';
-    videos = data;
-    if (!videos.length) { empty.style.display = 'block'; updateToolbar(); return; }
-    videos.forEach(v => grid.appendChild(buildCard(v)));
-    updateToolbar();
+    totalVideos = data.total ?? 0;
+    totalPages = data.total_pages ?? 0;
+    currentPage = data.page ?? 1;
+    if (!totalVideos) { empty.style.display = 'block'; updateToolbar(); return; }
+    renderVideos(data.videos ?? data);
   })
   .catch(() => { empty.style.display = 'block'; });
 </script>

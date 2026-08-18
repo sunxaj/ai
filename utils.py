@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 import base64
+import hashlib
 import re
 import json
 import subprocess
+from urllib.parse import quote
 from flask import Flask, jsonify, request, send_from_directory, make_response, render_template
 import psutil
 import time
@@ -15,6 +17,9 @@ os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 VIDEOS_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'videos')
 os.makedirs(VIDEOS_FOLDER, exist_ok=True)
 
+THUMBNAILS_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'thumbnails')
+os.makedirs(THUMBNAILS_FOLDER, exist_ok=True)
+
 def resolve_video_folder(folder_param):
     if not folder_param:
         return VIDEOS_FOLDER
@@ -22,6 +27,42 @@ def resolve_video_folder(folder_param):
     if not os.path.isdir(folder):
         return None
     return folder
+
+def thumbnail_path_for(folder, name):
+    key = hashlib.sha256(f"{folder}|{name}".encode()).hexdigest()[:16]
+    return os.path.join(THUMBNAILS_FOLDER, f"{key}.jpg")
+
+def ensure_thumbnail(folder, name):
+    fp = os.path.join(folder, name)
+    if not os.path.isfile(fp):
+        return None
+    tp = thumbnail_path_for(folder, name)
+    try:
+        if os.path.exists(tp) and os.path.getmtime(tp) >= os.path.getmtime(fp):
+            return tp
+        result = subprocess.run(
+            ['ffmpeg', '-y', '-sseof', '-0.5', '-i', fp,
+             '-frames:v', '1', '-q:v', '3', tp],
+            capture_output=True, text=True, timeout=30
+        )
+        if result.returncode != 0 or not os.path.exists(tp):
+            return None
+        return tp
+    except Exception:
+        if os.path.exists(tp):
+            try:
+                os.remove(tp)
+            except OSError:
+                pass
+        return None
+
+def remove_thumbnail(folder, name):
+    tp = thumbnail_path_for(folder, name)
+    if os.path.exists(tp):
+        try:
+            os.remove(tp)
+        except OSError:
+            pass
 
 app = Flask(__name__, static_folder='.', static_url_path='', template_folder='.')
 app.config['JSON_AS_ASCII'] = False
@@ -296,12 +337,43 @@ def api_list_videos():
     folder = resolve_video_folder(request.args.get('folder', ''))
     if not folder:
         return jsonify({'error': 'invalid folder'}), 400
+    page = max(1, int(request.args.get('page', 1)))
+    per_page = min(100, max(1, int(request.args.get('per_page', 20))))
     files = sorted(glob.glob(os.path.join(folder, '*.mp4')))
+    total = len(files)
+    start = (page - 1) * per_page
+    page_files = files[start:start + per_page]
     result = []
-    for fp in files:
+    for fp in page_files:
         name = os.path.basename(fp)
-        result.append({'name': name, 'path': f'/api/video-file?folder={folder}&name={name}'})
-    return jsonify(result)
+        folder_q = quote(folder, safe='')
+        name_q = quote(name, safe='')
+        result.append({
+            'name': name,
+            'path': f'/api/video-file?folder={folder_q}&name={name_q}',
+            'thumbnail': f'/api/video-thumbnail?folder={folder_q}&name={name_q}',
+        })
+    return jsonify({
+        'videos': result,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'total_pages': (total + per_page - 1) // per_page if total else 0,
+    })
+
+@app.route('/api/video-thumbnail')
+def api_video_thumbnail():
+    folder = resolve_video_folder(request.args.get('folder', ''))
+    name = request.args.get('name', '')
+    if not folder or not name or '/' in name or '..' in name:
+        return '', 400
+    fp = os.path.join(folder, name)
+    if not os.path.isfile(fp):
+        return '', 404
+    tp = ensure_thumbnail(folder, name)
+    if not tp:
+        return '', 500
+    return send_from_directory(THUMBNAILS_FOLDER, os.path.basename(tp))
 
 @app.route('/api/video-file')
 def api_video_file():
@@ -394,6 +466,7 @@ def api_video_delete():
         fp = os.path.join(folder, name)
         try:
             os.remove(fp)
+            remove_thumbnail(folder, name)
             deleted.append(name)
         except Exception as e:
             errors.append(name)
