@@ -96,8 +96,9 @@ def stats():
 
 @app.route('/list-videos')
 def list_videos():
-    files = sorted(glob.glob('vd_h/*.mp4'))
+    files = sorted(glob.glob('videos/*.mp4'))
     files = [f.replace('\\', '/') for f in files]
+    files.sort(key=lambda x: os.stat(x).st_birthtime, reverse=True)
     response = make_response(jsonify(files))
     response.headers['Access-Control-Allow-Origin'] = '*'
     return response
@@ -407,7 +408,21 @@ def api_video_meta():
         nb_frames = video_stream.get('nb_frames')
         total_frames = int(nb_frames) if nb_frames and nb_frames != 'N/A' else round(duration * fps)
         stat = os.stat(fp)
-        creation_info = fmt.get('tags', {}).get('description', '') or fmt.get('tags', {}).get('comment', '')
+        creation_info_raw = fmt.get('tags', {}).get('description', '') or fmt.get('tags', {}).get('comment', '')
+        if '_meta' in creation_info_raw:
+            _meta_data = json.loads(creation_info_raw)
+            prompt_dict = json.loads(_meta_data["prompt"])
+            #creation_info = prompt_dict["373"]["inputs"]["text"]
+            # 2. Loop through all nodes, extract text from inputs, and collect them
+            all_texts = []
+            for node_id, node_content in prompt_dict.items():
+                inputs = node_content.get("inputs", {})
+            # If the input contains a 'text' field, grab it
+                if "text" in inputs:
+                    all_texts.append(inputs["text"])    
+            #creation_info = "\n".join(all_texts)
+            creation_info = "\n =============================== \n".join(all_texts)
+        else: creation_info = creation_info_raw
         return jsonify({
             'name': name,
             'size_bytes': stat.st_size,
@@ -440,8 +455,12 @@ def api_video_update_meta():
              '-metadata', f'description={creation_info}',
              '-metadata', f'comment={creation_info}',
              tmp, '-y'],
-            capture_output=True, text=True, timeout=60
+            capture_output=True#, text=True, timeout=60
         )
+        # Decode while safely dropping or replacing unreadable characters
+        stdout_text = result.stdout.decode("utf-8", errors="ignore")
+        stderr_text = result.stderr.decode("utf-8", errors="replace")  # or 'cp1252' / 'latin-1'
+
         if result.returncode != 0:
             return jsonify({'error': result.stderr[-300:]}), 500
         os.replace(tmp, fp)
